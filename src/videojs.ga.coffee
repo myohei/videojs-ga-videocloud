@@ -76,7 +76,6 @@ videojs.plugin 'ga', (options = {}) ->
 
   # load ga script if in iframe and tracker option is set
   domain = options.allowedDomain || dataSetupOptions.allowedDomain
-  console.log("=== domain" + domain)
   tracker = options.tracker || dataSetupOptions.tracker
   if window.location.host == 'players.brightcove.net' || window.location.host == 'preview-players.brightcove.net'
     if tracker
@@ -95,22 +94,16 @@ videojs.plugin 'ga', (options = {}) ->
         m.parentNode.insertBefore a, m
       ) window, document, "script", "//www.google-analytics.com/analytics.js", "ga"
       createTracker = (opt_clientId) ->
-        console.log('=== create tracker ' + opt_clientId)
         if !trackerCreated
           fields = {}
           if opt_clientId
             fields.clientId = opt_clientId
           fields.name = trackerName
-          console.log("=== create tracker:" , fields)
           ga 'create', tracker, 'auto', fields
           ga trackerName+'.require', 'displayfeatures'
           trackerCreated = true
       window.addEventListener 'message',(event) ->
-        console.log("==== event = ")
-        console.log(event)
-        console.log('======== ' + domain + " /origin:" + event.origin)
         if event.origin.indexOf(domain) < 0
-          console.log('=== RETURN RETURN RETURN ===  ')
           return
         createTracker(event.data)
       setTimeout(createTracker, 3000);
@@ -220,20 +213,13 @@ videojs.plugin 'ga', (options = {}) ->
     return
 
   sendbeacon = ( action, nonInteraction, value ) ->
-    # videojs.log action, " ", nonInteraction, " ", value
     if sendbeaconOverride
-      console.log('======= override ======')
       sendbeaconOverride(eventCategory, action, eventLabel, value, nonInteraction)
     else if window.ga
-      console.log("=== domain:" + domain)
       ga () ->
         trackers = ga.getAll()
-        console.log("tracker: == "+tracker)
-        console.log(trackers)
         for t in trackers
-          console.log("===== " + t.get('trackingId'))
           if !tracker || tracker == t.get('trackingId')
-            console.log('==== SEND SEND SEND ')
             t.send 'event',
               'eventCategory' 	: eventCategory
               'eventAction'		  : action
