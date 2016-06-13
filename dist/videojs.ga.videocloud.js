@@ -1,13 +1,13 @@
 /*
-* videojs-ga - v0.4.1 - 2015-08-10
-* Copyright (c) 2015 Michael Bensoussan
+* videojs-ga - v0.4.1 - 2016-06-13
+* Copyright (c) 2016 Michael Bensoussan
 * Licensed MIT
 */
 (function() {
   var __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   videojs.plugin('ga', function(options) {
-    var adStateRegex, currentVideo, dataSetupOptions, defaultLabel, defaultsEventsToTrack, end, endTracked, error, eventCategory, eventLabel, eventNames, eventsToTrack, fullscreen, getEventName, href, iframe, isInAdState, loaded, parsedOptions, pause, percentsAlreadyTracked, percentsPlayedInterval, play, player, referrer, resize, seekEnd, seekStart, seeking, sendbeacon, sendbeaconOverride, start, startTracked, timeupdate, tracker, volumeChange,
+    var adStateRegex, createTracker, currentVideo, dataSetupOptions, defaultLabel, defaultsEventsToTrack, domain, end, endTracked, error, eventCategory, eventLabel, eventNames, eventsToTrack, fullscreen, getEventName, href, iframe, isInAdState, loaded, parsedOptions, pause, percentsAlreadyTracked, percentsPlayedInterval, play, player, referrer, resize, seekEnd, seekStart, seeking, sendbeacon, sendbeaconOverride, start, startTracked, timeupdate, tracker, trackerCreated, trackerName, volumeChange,
       _this = this;
     if (options == null) {
       options = {};
@@ -39,6 +39,8 @@
     seeking = false;
     eventLabel = '';
     currentVideo = '';
+    trackerCreated = false;
+    trackerName = 'videoPlayerTracker';
     eventNames = {
       "video_load": "Video Load",
       "percent_played": "Percent played",
@@ -67,8 +69,10 @@
       }
       return name;
     };
+    domain = options.allowedDomain || dataSetupOptions.allowedDomain;
+    console.log("=== domain" + domain);
+    tracker = options.tracker || dataSetupOptions.tracker;
     if (window.location.host === 'players.brightcove.net' || window.location.host === 'preview-players.brightcove.net') {
-      tracker = options.tracker || dataSetupOptions.tracker;
       if (tracker) {
         (function(i, s, o, g, r, a, m) {
           i["GoogleAnalyticsObject"] = r;
@@ -82,8 +86,32 @@
           a.src = g;
           return m.parentNode.insertBefore(a, m);
         })(window, document, "script", "//www.google-analytics.com/analytics.js", "ga");
-        ga('create', tracker, 'auto');
-        ga('require', 'displayfeatures');
+        createTracker = function(opt_clientId) {
+          var fields;
+          console.log('=== create tracker ' + opt_clientId);
+          if (!trackerCreated) {
+            fields = {};
+            if (opt_clientId) {
+              fields.clientId = opt_clientId;
+            }
+            fields.name = trackerName;
+            console.log("=== create tracker:", fields);
+            ga('create', tracker, 'auto', fields);
+            ga(trackerName + '.require', 'displayfeatures');
+            return trackerCreated = true;
+          }
+        };
+        window.addEventListener('message', function(event) {
+          console.log("==== event = ");
+          console.log(event);
+          console.log('======== ' + domain + " /origin:" + event.origin);
+          if (event.origin.indexOf(domain) < 0) {
+            console.log('=== RETURN RETURN RETURN ===  ');
+            return;
+          }
+          return createTracker(event.data);
+        });
+        setTimeout(createTracker, 3000);
       }
     }
     adStateRegex = /(\s|^)vjs-ad-(playing|loading)(\s|$)/;
@@ -197,14 +225,33 @@
     };
     sendbeacon = function(action, nonInteraction, value) {
       if (sendbeaconOverride) {
+        console.log('======= override ======');
         sendbeaconOverride(eventCategory, action, eventLabel, value, nonInteraction);
       } else if (window.ga) {
-        ga('send', 'event', {
-          'eventCategory': eventCategory,
-          'eventAction': action,
-          'eventLabel': eventLabel,
-          'eventValue': value,
-          'nonInteraction': nonInteraction
+        console.log("=== domain:" + domain);
+        ga(function() {
+          var t, trackers, _i, _len, _results;
+          trackers = ga.getAll();
+          console.log("tracker: == " + tracker);
+          console.log(trackers);
+          _results = [];
+          for (_i = 0, _len = trackers.length; _i < _len; _i++) {
+            t = trackers[_i];
+            console.log("===== " + t.get('trackingId'));
+            if (!tracker || tracker === t.get('trackingId')) {
+              console.log('==== SEND SEND SEND ');
+              _results.push(t.send('event', {
+                'eventCategory': eventCategory,
+                'eventAction': action,
+                'eventLabel': eventLabel,
+                'eventValue': value,
+                'nonInteraction': nonInteraction
+              }));
+            } else {
+              _results.push(void 0);
+            }
+          }
+          return _results;
         });
       } else if (window._gaq) {
         _gaq.push(['_trackEvent', eventCategory, action, eventLabel, value, nonInteraction]);

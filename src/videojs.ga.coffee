@@ -45,6 +45,8 @@ videojs.plugin 'ga', (options = {}) ->
   seeking = false
   eventLabel = ''
   currentVideo = ''
+  trackerCreated = false
+  trackerName = 'videoPlayerTracker'
 
   eventNames = {
     "video_load": "Video Load",
@@ -73,8 +75,10 @@ videojs.plugin 'ga', (options = {}) ->
     return name
 
   # load ga script if in iframe and tracker option is set
+  domain = options.allowedDomain || dataSetupOptions.allowedDomain
+  console.log("=== domain" + domain)
+  tracker = options.tracker || dataSetupOptions.tracker
   if window.location.host == 'players.brightcove.net' || window.location.host == 'preview-players.brightcove.net'
-    tracker = options.tracker || dataSetupOptions.tracker
     if tracker
       ((i, s, o, g, r, a, m) ->
         i["GoogleAnalyticsObject"] = r
@@ -90,11 +94,28 @@ videojs.plugin 'ga', (options = {}) ->
         a.src = g
         m.parentNode.insertBefore a, m
       ) window, document, "script", "//www.google-analytics.com/analytics.js", "ga"
-      ga('create', tracker, 'auto')
-      ga('require', 'displayfeatures');
-
+      createTracker = (opt_clientId) ->
+        console.log('=== create tracker ' + opt_clientId)
+        if !trackerCreated
+          fields = {}
+          if opt_clientId
+            fields.clientId = opt_clientId
+          fields.name = trackerName
+          console.log("=== create tracker:" , fields)
+          ga 'create', tracker, 'auto', fields
+          ga trackerName+'.require', 'displayfeatures'
+          trackerCreated = true
+      window.addEventListener 'message',(event) ->
+        console.log("==== event = ")
+        console.log(event)
+        console.log('======== ' + domain + " /origin:" + event.origin)
+        if event.origin.indexOf(domain) < 0
+          console.log('=== RETURN RETURN RETURN ===  ')
+          return
+        createTracker(event.data)
+      setTimeout(createTracker, 3000);
   # get ad state of player
-  adStateRegex = /(\s|^)vjs-ad-(playing|loading)(\s|$)/
+  adStateRegex= /(\s|^)vjs-ad-(playing|loading)(\s|$)/
   isInAdState = ( player ) =>
     return adStateRegex.test( player.el().className )
 
@@ -201,14 +222,24 @@ videojs.plugin 'ga', (options = {}) ->
   sendbeacon = ( action, nonInteraction, value ) ->
     # videojs.log action, " ", nonInteraction, " ", value
     if sendbeaconOverride
+      console.log('======= override ======')
       sendbeaconOverride(eventCategory, action, eventLabel, value, nonInteraction)
     else if window.ga
-      ga 'send', 'event',
-        'eventCategory' 	: eventCategory
-        'eventAction'		  : action
-        'eventLabel'		  : eventLabel
-        'eventValue'      : value
-        'nonInteraction'	: nonInteraction
+      console.log("=== domain:" + domain)
+      ga () ->
+        trackers = ga.getAll()
+        console.log("tracker: == "+tracker)
+        console.log(trackers)
+        for t in trackers
+          console.log("===== " + t.get('trackingId'))
+          if !tracker || tracker == t.get('trackingId')
+            console.log('==== SEND SEND SEND ')
+            t.send 'event',
+              'eventCategory' 	: eventCategory
+              'eventAction'		  : action
+              'eventLabel'		  : eventLabel
+              'eventValue'      : value
+              'nonInteraction'	: nonInteraction
     else if window._gaq
       _gaq.push(['_trackEvent', eventCategory, action, eventLabel, value, nonInteraction])
     else
